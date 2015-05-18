@@ -1,7 +1,8 @@
 
 """
 Sort a directoy of image files into /year/month/day_hash.* structure.
-Non image files are currently ignored. -TODO move to their own folder.
+Non image files, and images without meta data are moved to directory for manual
+sorting.
 
 Requirments:
     https://pypi.python.org/pypi/ExifRead
@@ -17,7 +18,7 @@ from hashlib import sha1
 from shutil import copy2
 
 
-def create_filename(file_path, date):
+def create_filename(file_path, date=None):
     """
     Create unique filename using day of month and hash of file content
     """
@@ -25,17 +26,22 @@ def create_filename(file_path, date):
         file_hash = sha1(open_file.read()).hexdigest()
 
     _, extension = os.path.splitext(file_path)
-    filename = '{}_{}{}'.format(
-        date.strftime('%d'),
-        file_hash,
-        extension.lower())
+    filename = '{}{}'.format(
+            file_hash,
+            extension.lower())
+
+    if date:
+        day = '{}'.format(date.strftime('%d'))
+        filename = '{}_{}'.format(day, filename)
+
     return filename
 
 
-def build_structure(structure, root, file):
+def build_structure(structure, root, file, data_unsorted):
     """
     Build directory structure from file meta data, in this case the
-    date the photo was taken.
+    date the photo was taken, if no meta data found copy file into unsorted
+    directory for manual sorting later.
     """
     file_path = os.path.join(root, file)
     with open(file_path, 'rb') as open_file:
@@ -44,8 +50,7 @@ def build_structure(structure, root, file):
             created_at = str(tags['Image DateTime']) # eg. 2013:12:26 15:40:34
         except KeyError:
             print ('No date data found for: {}'.format(file_path))
-            # Default to using mtime?
-            #m_time = os.stat(file_path).st_mtime
+            unsorted(file_path, data_unsorted, create_filename(file_path))
             return structure
 
     # Convert string date into datetime object
@@ -116,3 +121,27 @@ def print_structure(structure):
             for original, filename in structure[year][month]:
                 print ('  {}'.format(filename))
     print ('---------------- "" ------------------')
+
+
+def setup(data_out, data_unsorted):
+    """
+    Ensure check output directories exist.
+    """
+
+    if not os.path.isdir(data_out):
+        try:
+            os.makedirs(data_out)
+        except FileExistsError:
+            pass
+
+    if not os.path.isdir(data_unsorted):
+        try:
+            os.makedirs(data_unsorted)
+        except FileExistsError:
+            pass
+
+
+def unsorted(file_path, directory, filename):
+    if not os.path.exists(directory + filename):
+        copy2(file_path, directory + filename)
+
